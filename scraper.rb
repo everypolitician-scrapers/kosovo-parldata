@@ -64,25 +64,30 @@ xml.each do |chamber|
       image: person.xpath('image').text,
       image: person.xpath('image').text,
       source: person.xpath('sources/url').first.text,
+      term: term[:id],
     }
 
     pmems = person.xpath('memberships[organization[classification[text()="parliamentary_group"]]]')
-    # binding.pry if pmems.count.zero?
-    pmems.each do |pmem|
-      mem = { 
-        term: term[:id],
-        start_date: pmem.xpath('start_date').text,
-        end_date: pmem.xpath('end_date').text,
-        party: pmem.xpath('organization/name').text,
-        party_id: pmem.xpath('organization/id').text,
-      }
-      next unless range = overlap(mem, term)
-      mem[:start_date] = range.first
-      mem[:end_date] = range.first
-      row = data.merge(mem)
-      ScraperWiki.save_sqlite([:id, :term, :start_date], row)
+    warn "No group memberships for #{data[:id]}" if pmems.count.zero?
+    if pmems.count.zero?
+      row = data.merge({
+        party: 'Unknown', # or none?
+        party_id: 'unknown',
+      })
+      ScraperWiki.save_sqlite([:id, :term], row)
+    else
+      pmems.each do |pmem|
+        mem = { 
+          party: pmem.xpath('organization/name').text,
+          party_id: pmem.xpath('organization/id').text,
+        }
+        next unless range = overlap(mem, term)
+        mem[:start_date] = range.first
+        mem[:end_date] = range.last
+        row = data.merge(mem)
+        ScraperWiki.save_sqlite([:id, :term, :start_date], row)
+      end
     end
   end
-
 end
 
