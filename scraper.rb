@@ -37,13 +37,12 @@ xml = noko_q('organizations', where: %Q[{"classification":"chamber"}] )
 xml.each do |chamber|
   term = { 
     id: chamber.xpath('.//id').text,
-    name: chamber.xpath('.//name').text,
+    name: chamber.xpath('.//name').text.sub('Kuvendit të Kosovës - ',''),
     start_date: chamber.xpath('.//founding_date').text,
     end_date: chamber.xpath('.//dissolution_date').text,
     source: chamber.xpath('.//sources/url').text,
   }
-  puts term
-  # ScraperWiki.save_sqlite([:id], term, 'terms')
+  ScraperWiki.save_sqlite([:id], term, 'terms')
 
   # http://api.parldata.eu/kv/kuvendi/memberships?where={"organization_id":"chamber_2001-11-17"}&embed=["person.memberships.organization"]
   mems = noko_q('memberships', { 
