@@ -23,13 +23,17 @@ def noko_q(endpoint, h)
 end
 
 def overlap(mem, term)
-  mS = mem[:start_date].to_s.empty?  ? '1000-01-01' : mem[:start_date]
-  mE = mem[:end_date].to_s.empty?    ? '2999-01-01' : mem[:end_date]
-  tS = term[:start_date].to_s.empty? ? '1000-01-01' : term[:start_date]
-  tE = term[:end_date].to_s.empty?   ? '2999-01-01' : term[:end_date]
+  mS = mem[:start_date].to_s.empty?  ? '0000-00-00' : mem[:start_date]
+  mE = mem[:end_date].to_s.empty?    ? '9999-99-99' : mem[:end_date]
+  tS = term[:start_date].to_s.empty? ? '0000-00-00' : term[:start_date]
+  tE = term[:end_date].to_s.empty?   ? '9999-99-99' : term[:end_date]
 
   return unless mS <= tE && mE >= tS
-  [mS, mE, tS, tE].sort[1,2]
+  (s, e) = [mS, mE, tS, tE].sort[1,2]
+  return { 
+    start_date: s == '0000-00-00' ? nil : s,
+    end_date:   e == '9999-99-99' ? nil : e,
+  }
 end
 
 # http://api.parldata.eu/kv/kuvendi/organizations?where={"classification":"chamber"}
@@ -84,9 +88,7 @@ xml.each do |chamber|
           end_date: pmem.xpath('end_date').text,
         }
         next unless range = overlap(mem, term)
-        mem[:start_date] = range.first
-        mem[:end_date] = range.last
-        row = data.merge(mem)
+        row = data.merge(mem).merge(range)
         ScraperWiki.save_sqlite([:id, :term, :start_date], row)
       end
     end
