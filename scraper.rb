@@ -80,6 +80,8 @@ xml.each do |chamber|
         mem = { 
           party: pmem.xpath('organization/name').text,
           party_id: pmem.xpath('organization/id').text,
+          start_date: pmem.xpath('start_date').text,
+          end_date: pmem.xpath('end_date').text,
         }
         next unless range = overlap(mem, term)
         mem[:start_date] = range.first
