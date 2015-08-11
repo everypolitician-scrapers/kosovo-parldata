@@ -28,7 +28,7 @@ def overlap(mem, term)
   tS = term[:start_date].to_s.empty? ? '0000-00-00' : term[:start_date]
   tE = term[:end_date].to_s.empty?   ? '9999-99-99' : term[:end_date]
 
-  return unless mS <= tE && mE >= tS
+  return unless mS < tE && mE > tS
   (s, e) = [mS, mE, tS, tE].sort[1,2]
   return { 
     start_date: s == '0000-00-00' ? nil : s,
