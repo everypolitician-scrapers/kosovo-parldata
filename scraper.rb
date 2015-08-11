@@ -71,23 +71,25 @@ xml.each do |chamber|
       term: term[:id],
     }
 
-    pmems = person.xpath('memberships[organization[classification[text()="parliamentary_group"]]]')
-    warn "No group memberships for #{data[:id]}" if pmems.count.zero?
-    if pmems.count.zero?
+    mems = person.xpath('memberships[organization[classification[text()="parliamentary_group"]]]').map { |m|
+      {
+        party: m.xpath('organization/name').text,
+        party_id: m.xpath('organization/id').text,
+        start_date: m.xpath('start_date').text,
+        end_date: m.xpath('end_date').text,
+      }
+    }.select { |m| overlap(m, term) } 
+
+    if mems.count.zero?
       row = data.merge({
         party: 'Unknown', # or none?
-        party_id: 'unknown',
+        party_id: '_unknown',
       })
+      puts row
       ScraperWiki.save_sqlite([:id, :term], row)
     else
-      pmems.each do |pmem|
-        mem = { 
-          party: pmem.xpath('organization/name').text,
-          party_id: pmem.xpath('organization/id').text,
-          start_date: pmem.xpath('start_date').text,
-          end_date: pmem.xpath('end_date').text,
-        }
-        next unless range = overlap(mem, term)
+      mems.each do |mem|
+        range = overlap(mem, term) or raise "No overlap"
         row = data.merge(mem).merge(range)
         ScraperWiki.save_sqlite([:id, :term, :start_date], row)
       end
