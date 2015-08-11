@@ -42,6 +42,7 @@ xml.each do |chamber|
     end_date: chamber.xpath('.//dissolution_date').text,
     source: chamber.xpath('.//sources/url').text,
   }
+  puts term
   ScraperWiki.save_sqlite([:id], term, 'terms')
 
   # http://api.parldata.eu/kv/kuvendi/memberships?where={"organization_id":"chamber_2001-11-17"}&embed=["person.memberships.organization"]
@@ -65,7 +66,9 @@ xml.each do |chamber|
       source: person.xpath('sources/url').first.text,
     }
 
-    person.xpath('memberships[organization[classification[text()="parliamentary_group"]]]').each do |pmem|
+    pmems = person.xpath('memberships[organization[classification[text()="parliamentary_group"]]]')
+    # binding.pry if pmems.count.zero?
+    pmems.each do |pmem|
       mem = { 
         term: term[:id],
         start_date: pmem.xpath('start_date').text,
@@ -74,6 +77,8 @@ xml.each do |chamber|
         party_id: pmem.xpath('organization/id').text,
       }
       next unless range = overlap(mem, term)
+      mem[:start_date] = range.first
+      mem[:end_date] = range.first
       row = data.merge(mem)
       ScraperWiki.save_sqlite([:id, :term, :start_date], row)
     end
