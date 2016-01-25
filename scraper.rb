@@ -6,6 +6,7 @@ require 'nokogiri'
 require 'open-uri'
 require 'colorize'
 require 'rest-client'
+require 'combine_popolo_memberships'
 
 require 'pry'
 require 'open-uri/cached'
@@ -15,6 +16,7 @@ OpenURI::Cache.cache_path = '.cache'
 
 def noko_q(endpoint, h)
   result = RestClient.get (@API_URL % endpoint), params: h
+  warn result.request.url
   doc = Nokogiri::XML(result)
   doc.remove_namespaces!
   entries = doc.xpath('resource/resource')
@@ -22,43 +24,28 @@ def noko_q(endpoint, h)
   return [entries, noko_q(endpoint, h.merge(page: np.text[/page=(\d+)/, 1]))].flatten
 end
 
-def overlap(mem, term)
-  mS = mem[:start_date].to_s.empty?  ? '0000-00-00' : mem[:start_date]
-  mE = mem[:end_date].to_s.empty?    ? '9999-99-99' : mem[:end_date]
-  tS = term[:start_date].to_s.empty? ? '0000-00-00' : term[:start_date]
-  tE = term[:end_date].to_s.empty?   ? '9999-99-99' : term[:end_date]
-
-  return unless mS < tE && mE > tS
-  (s, e) = [mS, mE, tS, tE].sort[1,2]
-  return { 
-    start_date: s == '0000-00-00' ? nil : s,
-    end_date:   e == '9999-99-99' ? nil : e,
-  }
+def earliest_date(*dates)
+  dates.compact.reject(&:empty?).sort.first
 end
 
-# http://api.parldata.eu/kv/kuvendi/organizations?where={"classification":"chamber"}
-xml = noko_q('organizations', where: %Q[{"classification":"chamber"}] )
-xml.each do |chamber|
-  term = { 
-    id: chamber.xpath('.//id').text,
-    name: chamber.xpath('.//name').text.sub('Kuvendit të Kosovës - ',''),
-    start_date: chamber.xpath('.//founding_date').text,
-    end_date: chamber.xpath('.//dissolution_date').text,
-    source: chamber.xpath('.//sources/url').text,
-  }
-  puts term
-  ScraperWiki.save_sqlite([:id], term, 'terms')
+def latest_date(*dates)
+  dates.compact.reject(&:empty?).sort.last
+end 
 
-  # http://api.parldata.eu/kv/kuvendi/memberships?where={"organization_id":"chamber_2001-11-17"}&embed=["person.memberships.organization"]
-  mems = noko_q('memberships', { 
-    where: %Q[{"organization_id":"#{term[:id]}"}],
-    max_results: 50,
-    embed: '["person.memberships.organization"]'
-  })
+def terms
+  @terms ||= noko_q('organizations', where: %Q[{"classification":"chamber"}] ).map do |chamber|
+    { 
+      id: chamber.xpath('.//id').text,
+      name: chamber.xpath('.//name').text.sub('Kuvendit të Kosovës - ',''),
+      start_date: chamber.xpath('.//founding_date').text,
+      end_date: chamber.xpath('.//dissolution_date').text,
+      source: chamber.xpath('.//sources/url').text,
+    }
+  end
+end
 
-  mems.each do |mem|
-    person = mem.xpath('person')
-    data = { 
+def person_data(person)
+  { 
       id: person.xpath('id').text,
       birth_date: person.xpath('birth_date').text,
       name: person.xpath('name').text,
@@ -67,33 +54,49 @@ xml.each do |chamber|
       given_name: person.xpath('given_name').text,
       image: person.xpath('image').text,
       image: person.xpath('image').text,
-      source: person.xpath('sources/url').first.text,
-      term: term[:id],
+      source: person.xpath('sources[1]/url').text,
+  }
+end
+
+def term_memberships(person)
+  person.xpath('memberships[organization[classification[text()="chamber"]]]').map { |gm|
+    term_id = gm.xpath('.//organization/id').text
+    term = terms.find { |t| t[:id] == term_id }
+    {
+      id: term_id,
+      name: gm.xpath('organization/name').text,
+      start_date: latest_date(gm.xpath('start_date').text, term[:start_date]),
+      end_date: earliest_date(gm.xpath('end_date').text, term[:end_date]),
     }
+  }
+end
 
-    mems = person.xpath('memberships[organization[classification[text()="parliamentary_group"]]]').map { |m|
-      {
-        party: m.xpath('organization/name').text,
-        party_id: m.xpath('organization/id').text,
-        start_date: m.xpath('start_date').text,
-        end_date: m.xpath('end_date').text,
-      }
-    }.select { |m| overlap(m, term) } 
+def group_memberships(person)
+  person.xpath('memberships[organization[classification[text()="parliamentary_group"]]]').map { |gm|
+    {
+      name: gm.xpath('organization/name').text,
+      id: gm.xpath('id').text,
+      start_date: latest_date(gm.xpath('organization/founding_date').text, gm.xpath('start_date').text),
+      end_date: earliest_date(gm.xpath('organization/dissolution_date').text, gm.xpath('end_date').text),
+    }
+  }
+end
 
-    if mems.count.zero?
-      row = data.merge({
-        party: 'Unknown', # or none?
-        party_id: '_unknown',
-      })
-      puts row
-      ScraperWiki.save_sqlite([:id, :term], row)
-    else
-      mems.each do |mem|
-        range = overlap(mem, term) or raise "No overlap"
-        row = data.merge(mem).merge(range)
-        ScraperWiki.save_sqlite([:id, :term, :start_date], row)
-      end
-    end
+def people
+  noko_q('people', { 
+    max_results: 50,
+    embed: '["memberships.organization"]',
+  })
+end
+
+
+ScraperWiki.save_sqlite([:id], terms, 'terms')
+people.each do |person|
+  person.xpath('changes').each { |m| m.remove } # make eyeballing easier
+  person_data = person_data(person)
+  CombinePopoloMemberships.combine(term: term_memberships(person), faction_id: group_memberships(person)).each do |mem|
+    data = person_data.merge(mem).reject { |k, v| v.to_s.empty? }
+    ScraperWiki.save_sqlite([:id, :term, :faction_id, :start_date], data)
   end
 end
 
