@@ -75,7 +75,7 @@ def group_memberships(person)
   person.xpath('memberships[organization[classification[text()="parliamentary_group"]]]').map { |gm|
     {
       name: gm.xpath('organization/name').text,
-      id: gm.xpath('id').text,
+      id: gm.xpath('organization/id').text,
       start_date: latest_date(gm.xpath('organization/founding_date').text, gm.xpath('start_date').text),
       end_date: earliest_date(gm.xpath('organization/dissolution_date').text, gm.xpath('end_date').text),
     }
