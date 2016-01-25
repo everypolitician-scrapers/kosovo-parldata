@@ -34,7 +34,7 @@ end
 
 def terms
   @terms ||= noko_q('organizations', where: %Q[{"classification":"chamber"}] ).map do |chamber|
-    { 
+    {
       id: chamber.xpath('.//id').text,
       name: chamber.xpath('.//name').text.sub('Kuvendit të Kosovës - ',''),
       start_date: chamber.xpath('.//founding_date').text,
@@ -44,8 +44,17 @@ def terms
   end
 end
 
+def factions
+  @factions ||= noko_q('organizations', where: %Q[{"classification":"parliamentary_group"}] ).map do |pg|
+    {
+      id: pg.xpath('.//id').text,
+      name: pg.xpath('.//name').text,
+    }
+  end
+end
+
 def person_data(person)
-  { 
+  {
       id: person.xpath('id').text,
       birth_date: person.xpath('birth_date').text,
       name: person.xpath('name').text,
@@ -95,6 +104,7 @@ people.each do |person|
   person.xpath('changes').each { |m| m.remove } # make eyeballing easier
   person_data = person_data(person)
   CombinePopoloMemberships.combine(term: term_memberships(person), faction_id: group_memberships(person)).each do |mem|
+    mem[:faction] = factions.find { |f| f[:id] == mem[:faction_id] }[:name]
     data = person_data.merge(mem).reject { |k, v| v.to_s.empty? }
     ScraperWiki.save_sqlite([:id, :term, :faction_id, :start_date], data)
   end
