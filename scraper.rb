@@ -4,7 +4,6 @@
 require 'scraperwiki'
 require 'nokogiri'
 require 'open-uri'
-require 'colorize'
 require 'rest-client'
 require 'combine_popolo_memberships'
 
