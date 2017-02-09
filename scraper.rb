@@ -35,7 +35,7 @@ def terms
   @terms ||= noko_q('organizations', where: %Q[{"classification":"chamber"}] ).map do |chamber|
     {
       id: chamber.xpath('.//id').text,
-      name: chamber.xpath('.//name').text.sub('Kuvendit të Kosovës - ',''),
+      name: chamber.xpath('.//value').text.sub('Kuvendit të Kosovës - ',''),
       start_date: chamber.xpath('.//founding_date').text,
       end_date: chamber.xpath('.//dissolution_date').text,
       source: chamber.xpath('.//sources/url').text,
