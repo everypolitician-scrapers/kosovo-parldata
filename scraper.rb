@@ -101,6 +101,7 @@ people.each do |person|
   person_data = person_data(person)
   CombinePopoloMemberships.combine(term: term_memberships(person), faction_id: group_memberships(person)).each do |mem|
     mem[:faction] = factions.find { |f| f[:id] == mem[:faction_id] }[:name]
+    mem.delete(:name) # we want the person name, not the membership name
     data = person_data.merge(mem).reject { |_k, v| v.to_s.empty? }
     warn data if ENV['MORPH_DEBUG']
     ScraperWiki.save_sqlite(%i[id term faction_id start_date], data)
